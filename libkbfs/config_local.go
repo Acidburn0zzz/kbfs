@@ -5,6 +5,7 @@
 package libkbfs
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -927,7 +928,9 @@ func (c *ConfigLocal) EnableJournaling(
 		log, backpressureMinThreshold, backpressureMaxThreshold,
 		journalByteLimitFrac, journalByteLimit, journalFileLimit,
 		quotaBackpressureMinThreshold, quotaBackpressureMaxThreshold,
-		defaultDiskLimitMaxDelay, journalRoot)
+		defaultDiskLimitMaxDelay, journalRoot, func() (int64, int64) {
+			return 0, math.MaxInt64
+		})
 	if err != nil {
 		return err
 	}
