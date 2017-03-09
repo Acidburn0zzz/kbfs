@@ -919,9 +919,14 @@ func (c *ConfigLocal) EnableJournaling(
 	const journalByteLimit int64 = 50 * 1024 * 1024 * 1024
 	// Set the absolute journal file limit to 1.5 million for now.
 	const journalFileLimit int64 = 1500000
+
+	const quotaBackpressureMinThreshold = 0.8
+	const quotaBackpressureMaxThreshold = 1.2
+
 	bdl, err := newBackpressureDiskLimiter(
 		log, backpressureMinThreshold, backpressureMaxThreshold,
 		journalByteLimitFrac, journalByteLimit, journalFileLimit,
+		quotaBackpressureMinThreshold, quotaBackpressureMaxThreshold,
 		defaultDiskLimitMaxDelay, journalRoot)
 	if err != nil {
 		return err

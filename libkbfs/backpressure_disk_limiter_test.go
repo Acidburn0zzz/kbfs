@@ -157,7 +157,7 @@ func TestBackpressureConstructorError(t *testing.T) {
 	log := logger.NewTestLogger(t)
 	fakeErr := errors.New("Fake error")
 	_, err := newBackpressureDiskLimiterWithFunctions(
-		log, 0.1, 0.9, 0.25, 100, 10, 8*time.Second, nil,
+		log, 0.1, 0.9, 0.25, 100, 10, 0.8, 1.2, 8*time.Second, nil,
 		func() (int64, int64, error) {
 			return 0, 0, fakeErr
 		})
@@ -170,7 +170,7 @@ func TestBackpressureConstructorError(t *testing.T) {
 func TestBackpressureDiskLimiterBeforeBlockPut(t *testing.T) {
 	log := logger.NewTestLogger(t)
 	bdl, err := newBackpressureDiskLimiterWithFunctions(
-		log, 0.1, 0.9, 0.25, 22, 5, 8*time.Second,
+		log, 0.1, 0.9, 0.25, 22, 5, 0.8, 1.2, 8*time.Second,
 		func(ctx context.Context, delay time.Duration) error {
 			return nil
 		},
@@ -193,7 +193,7 @@ func TestBackpressureDiskLimiterBeforeBlockPut(t *testing.T) {
 func TestBackpressureDiskLimiterBeforeBlockPutError(t *testing.T) {
 	log := logger.NewTestLogger(t)
 	bdl, err := newBackpressureDiskLimiterWithFunctions(
-		log, 0.1, 0.9, 0.25, 10, 1, 8*time.Second,
+		log, 0.1, 0.9, 0.25, 10, 1, 0.8, 1.2, 8*time.Second,
 		func(ctx context.Context, delay time.Duration) error {
 			return nil
 		},
@@ -221,7 +221,7 @@ func TestBackpressureDiskLimiterGetDelay(t *testing.T) {
 	log := logger.NewTestLogger(t)
 	bdl, err := newBackpressureDiskLimiterWithFunctions(
 		log, 0.1, 0.9, 0.25, math.MaxInt64, math.MaxInt64,
-		8*time.Second,
+		0.8, 1.2, 8*time.Second,
 		func(ctx context.Context, delay time.Duration) error {
 			return nil
 		},
@@ -308,7 +308,7 @@ func testBackpressureDiskLimiterLargeDiskDelay(
 	log := logger.NewTestLogger(t)
 	bdl, err := newBackpressureDiskLimiterWithFunctions(
 		log, 0.1, 0.9, 0.25, byteLimit, fileLimit,
-		8*time.Second, delayFn,
+		0.8, 1.2, 8*time.Second, delayFn,
 		func() (int64, int64, error) {
 			return math.MaxInt64, math.MaxInt64, nil
 		})
@@ -494,7 +494,7 @@ func testBackpressureDiskLimiterSmallDiskDelay(
 	log := logger.NewTestLogger(t)
 	bdl, err := newBackpressureDiskLimiterWithFunctions(
 		log, 0.1, 0.9, 0.25, math.MaxInt64, math.MaxInt64,
-		8*time.Second, delayFn, getFreeBytesAndFilesFn)
+		0.8, 1.2, 8*time.Second, delayFn, getFreeBytesAndFilesFn)
 	require.NoError(t, err)
 
 	byteSnapshot, fileSnapshot := bdl.getSnapshotsForTest()
