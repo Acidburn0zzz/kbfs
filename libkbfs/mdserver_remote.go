@@ -46,6 +46,7 @@ type MDServerRemote struct {
 	rpcLogFactory *libkb.RPCLogFactory
 	authToken     *kbfscrypto.AuthToken
 	squelchRekey  bool
+	pinger        pinger
 
 	authenticatedMtx sync.Mutex
 	isAuthenticated  bool
@@ -93,6 +94,14 @@ func NewMDServerRemote(config Config, srvAddr string,
 		rpcLogFactory: rpcLogFactory,
 		rekeyTimer:    time.NewTimer(MdServerBackgroundRekeyPeriod),
 	}
+
+	mdServer.pinger = pinger{
+		name:    "MDServerRemote",
+		doPing:  mdServer.pingOnce,
+		timeout: MdServerPingTimeout,
+		log:     mdServer.log,
+	}
+
 	mdServer.authToken = kbfscrypto.NewAuthToken(config.Crypto(),
 		MdServerTokenServer, MdServerTokenExpireIn,
 		"libkbfs_mdserver_remote", VersionString(), mdServer)
@@ -173,7 +182,7 @@ func (md *MDServerRemote) OnConnect(ctx context.Context,
 	md.config.KBFSOps().PushConnectionStatusChange(MDServiceName, nil)
 
 	// start pinging
-	md.resetPingTicker(pingIntervalSeconds)
+	md.pinger.resetTicker(pingIntervalSeconds)
 	return nil
 }
 
@@ -256,8 +265,6 @@ func (md *MDServerRemote) RefreshAuthToken(ctx context.Context) {
 
 func (md *MDServerRemote) pingOnce(ctx context.Context) {
 	clock := md.config.Clock()
-	ctx, cancel := context.WithTimeout(ctx, MdServerPingTimeout)
-	defer cancel()
 	beforePing := clock.Now()
 	resp, err := md.getClient().Ping2(ctx)
 	if err == context.DeadlineExceeded {
@@ -291,43 +298,6 @@ func (md *MDServerRemote) pingOnce(ctx context.Context) {
 	}()
 }
 
-// Helper to reset a ping ticker.
-func (md *MDServerRemote) resetPingTicker(intervalSeconds int) {
-	md.tickerMu.Lock()
-	defer md.tickerMu.Unlock()
-
-	if md.tickerCancel != nil {
-		md.tickerCancel()
-		md.tickerCancel = nil
-	}
-	if intervalSeconds <= 0 {
-		return
-	}
-
-	md.log.Debug("MDServerRemote: starting new ping ticker with interval %d",
-		intervalSeconds)
-
-	var ctx context.Context
-	ctx, md.tickerCancel = context.WithCancel(context.Background())
-	go func() {
-		// Ping right away to get the offset
-		md.pingOnce(ctx)
-
-		ticker := time.NewTicker(time.Duration(intervalSeconds) * time.Second)
-		for {
-			select {
-			case <-ticker.C:
-				md.pingOnce(ctx)
-
-			case <-ctx.Done():
-				md.log.CDebugf(ctx, "MDServerRemote: stopping ping ticker")
-				ticker.Stop()
-				return
-			}
-		}
-	}()
-}
-
 // OnConnectError implements the ConnectionHandler interface.
 func (md *MDServerRemote) OnConnectError(err error, wait time.Duration) {
 	md.log.Warning("MDServerRemote: connection error: %q; retrying in %s",
@@ -335,7 +305,7 @@ func (md *MDServerRemote) OnConnectError(err error, wait time.Duration) {
 	// TODO: it might make sense to show something to the user if this is
 	// due to authentication, for example.
 	md.cancelObservers()
-	md.resetPingTicker(0)
+	md.pinger.resetTicker(0)
 	if md.authToken != nil {
 		md.authToken.Shutdown()
 	}
@@ -374,7 +344,7 @@ func (md *MDServerRemote) OnDisconnected(ctx context.Context,
 	md.authenticatedMtx.Unlock()
 
 	md.cancelObservers()
-	md.resetPingTicker(0)
+	md.pinger.resetTicker(0)
 	if md.authToken != nil {
 		md.authToken.Shutdown()
 	}
@@ -822,7 +792,7 @@ func (md *MDServerRemote) Shutdown() {
 	// cancel pending observers
 	md.cancelObservers()
 	// cancel the ping ticker
-	md.resetPingTicker(0)
+	md.pinger.resetTicker(0)
 	// cancel the auth token ticker
 	if md.authToken != nil {
 		md.authToken.Shutdown()
