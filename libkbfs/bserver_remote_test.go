@@ -75,7 +75,7 @@ func TestBServerRemotePutAndGet(t *testing.T) {
 	fc := fakeBServerClient{
 		entries: make(map[keybase1.BlockIdCombo]fakeBlockEntry),
 	}
-	b := newBlockServerRemoteWithClient(codec, nil, log, &fc)
+	b := newBlockServerRemoteWithClient(codec, log, &fc)
 
 	tlfID := tlf.FakeID(2, false)
 	bCtx := kbfsblock.MakeFirstContext(currentUID, keybase1.BlockType_DATA)
@@ -116,7 +116,7 @@ func TestBServerRemotePutCanceled(t *testing.T) {
 	currentUID := keybase1.MakeTestUID(1)
 	serverConn, conn := rpc.MakeConnectionForTest(t)
 	log := logger.NewTestLogger(t)
-	b := newBlockServerRemoteWithClient(codec, nil, log,
+	b := newBlockServerRemoteWithClient(codec, log,
 		keybase1.BlockClient{Cli: conn.GetClient()})
 
 	f := func(ctx context.Context) error {
