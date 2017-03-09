@@ -5,7 +5,6 @@
 package libkbfs
 
 import (
-	"math"
 	"sync"
 	"time"
 
@@ -924,13 +923,16 @@ func (c *ConfigLocal) EnableJournaling(
 	const quotaBackpressureMinThreshold = 0.8
 	const quotaBackpressureMaxThreshold = 1.2
 
+	q := NewEventuallyConsistentQuotaUsage(c, "BDL")
+	quotaFn := func(ctx context.Context) (int64, int64, error) {
+		return q.Get(ctx, 1*time.Minute)
+	}
+
 	bdl, err := newBackpressureDiskLimiter(
 		log, backpressureMinThreshold, backpressureMaxThreshold,
 		journalByteLimitFrac, journalByteLimit, journalFileLimit,
 		quotaBackpressureMinThreshold, quotaBackpressureMaxThreshold,
-		defaultDiskLimitMaxDelay, journalRoot, func() (int64, int64) {
-			return 0, math.MaxInt64
-		})
+		defaultDiskLimitMaxDelay, journalRoot, quotaFn)
 	if err != nil {
 		return err
 	}

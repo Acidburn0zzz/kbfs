@@ -160,7 +160,7 @@ func TestBackpressureConstructorError(t *testing.T) {
 		log, 0.1, 0.9, 0.25, 100, 10, 0.8, 1.2, 8*time.Second, nil,
 		func() (int64, int64, error) {
 			return 0, 0, fakeErr
-		}, func() (int64, int64) { return 0, math.MaxInt64 })
+		}, func(context.Context) (int64, int64, error) { return 0, math.MaxInt64, nil })
 	require.Equal(t, fakeErr, err)
 }
 
@@ -176,7 +176,7 @@ func TestBackpressureDiskLimiterBeforeBlockPut(t *testing.T) {
 		},
 		func() (int64, int64, error) {
 			return math.MaxInt64, math.MaxInt64, nil
-		}, func() (int64, int64) { return 0, math.MaxInt64 })
+		}, func(context.Context) (int64, int64, error) { return 0, math.MaxInt64, nil })
 	require.NoError(t, err)
 
 	availBytes, availFiles, err := bdl.beforeBlockPut(
@@ -199,7 +199,7 @@ func TestBackpressureDiskLimiterBeforeBlockPutError(t *testing.T) {
 		},
 		func() (int64, int64, error) {
 			return math.MaxInt64, math.MaxInt64, nil
-		}, func() (int64, int64) { return 0, math.MaxInt64 })
+		}, func(context.Context) (int64, int64, error) { return 0, math.MaxInt64, nil })
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(
@@ -227,7 +227,7 @@ func TestBackpressureDiskLimiterGetDelay(t *testing.T) {
 		},
 		func() (int64, int64, error) {
 			return math.MaxInt64, math.MaxInt64, nil
-		}, func() (int64, int64) { return 0, math.MaxInt64 })
+		}, func(context.Context) (int64, int64, error) { return 0, math.MaxInt64, nil })
 	require.NoError(t, err)
 
 	now := time.Now()
@@ -311,7 +311,7 @@ func testBackpressureDiskLimiterLargeDiskDelay(
 		0.8, 1.2, 8*time.Second, delayFn,
 		func() (int64, int64, error) {
 			return math.MaxInt64, math.MaxInt64, nil
-		}, func() (int64, int64) { return 0, math.MaxInt64 })
+		}, func(context.Context) (int64, int64, error) { return 0, math.MaxInt64, nil })
 	require.NoError(t, err)
 
 	byteSnapshot, fileSnapshot := bdl.getSnapshotsForTest()
@@ -495,7 +495,7 @@ func testBackpressureDiskLimiterSmallDiskDelay(
 	bdl, err := newBackpressureDiskLimiterWithFunctions(
 		log, 0.1, 0.9, 0.25, math.MaxInt64, math.MaxInt64,
 		0.8, 1.2, 8*time.Second, delayFn, getFreeBytesAndFilesFn,
-		func() (int64, int64) { return 0, math.MaxInt64 })
+		func(context.Context) (int64, int64, error) { return 0, math.MaxInt64, nil })
 	require.NoError(t, err)
 
 	byteSnapshot, fileSnapshot := bdl.getSnapshotsForTest()
