@@ -110,14 +110,14 @@ func (bt backpressureTracker) freeFrac() float64 {
 // multiplied with the maximum delay to get the backpressure delay to
 // apply.
 func (bt backpressureTracker) delayScale() float64 {
-	freeSpaceFrac := bt.freeFrac()
+	freeFrac := bt.freeFrac()
 
-	// We want the delay to be 0 if freeSpaceFrac <= m and the
-	// max delay if freeSpaceFrac >= M, so linearly interpolate
-	// the delay scale.
+	// We want the delay to be 0 if freeFrac <= m and the max
+	// delay if freeSpaceFrac >= M, so linearly interpolate the
+	// delay scale.
 	m := bt.minThreshold
 	M := bt.maxThreshold
-	return math.Min(1.0, math.Max(0.0, (freeSpaceFrac-m)/(M-m)))
+	return math.Min(1.0, math.Max(0.0, (freeFrac-m)/(M-m)))
 }
 
 // updateSemaphoreMax must be called whenever bt.used or bt.free
@@ -270,6 +270,21 @@ func newQuotaBackpressureTracker(minThreshold, maxThreshold float64,
 		minThreshold, maxThreshold, quotaBytes, remotedUsedBytes, 0,
 	}
 	return qbt, nil
+}
+
+// delayScale returns a number between 0 and 1, which should be
+// multiplied with the maximum delay to get the backpressure delay to
+// apply.
+func (qbt quotaBackpressureTracker) delayScale() float64 {
+	usedFrac := (float64(qbt.usedBytes) + float64(qbt.remoteUsedBytes)) /
+		float64(qbt.quotaBytes)
+
+	// We want the delay to be 0 if freeFrac <= m and the max
+	// delay if freeFrac >= M, so linearly interpolate the delay
+	// scale.
+	m := qbt.minThreshold
+	M := qbt.maxThreshold
+	return math.Min(1.0, math.Max(0.0, (usedFrac-m)/(M-m)))
 }
 
 func (qbt *quotaBackpressureTracker) onJournalEnable(journalBytes int64) {
@@ -437,6 +452,7 @@ func (bdl *backpressureDiskLimiter) onJournalEnable(
 	defer bdl.lock.Unlock()
 	availableBytes = bdl.byteTracker.onJournalEnable(journalBytes)
 	availableFiles = bdl.fileTracker.onJournalEnable(journalFiles)
+	bdl.quotaTracker.onJournalEnable(journalBytes)
 	return availableBytes, availableFiles
 }
 
@@ -446,13 +462,16 @@ func (bdl *backpressureDiskLimiter) onJournalDisable(
 	defer bdl.lock.Unlock()
 	bdl.byteTracker.onJournalDisable(journalBytes)
 	bdl.fileTracker.onJournalDisable(journalFiles)
+	bdl.quotaTracker.onJournalDisable(journalBytes)
 }
 
 func (bdl *backpressureDiskLimiter) getDelayLocked(
 	ctx context.Context, now time.Time) time.Duration {
 	byteDelayScale := bdl.byteTracker.delayScale()
 	fileDelayScale := bdl.fileTracker.delayScale()
-	delayScale := math.Max(byteDelayScale, fileDelayScale)
+	quotaDelayScale := bdl.quotaTracker.delayScale()
+	delayScale := math.Max(
+		math.Max(byteDelayScale, fileDelayScale), quotaDelayScale)
 
 	// Set maxDelay to min(bdl.maxDelay, time until deadline - 1s).
 	maxDelay := bdl.maxDelay
@@ -532,6 +551,7 @@ func (bdl *backpressureDiskLimiter) beforeBlockPut(
 	}()
 
 	availableFiles, err = bdl.fileTracker.beforeBlockPut(ctx, blockFiles)
+	// No need to call anything on bdl.quotaTracker.
 	return availableBytes, availableFiles, err
 }
 
@@ -541,6 +561,7 @@ func (bdl *backpressureDiskLimiter) afterBlockPut(
 	defer bdl.lock.Unlock()
 	bdl.byteTracker.afterBlockPut(blockBytes, putData)
 	bdl.fileTracker.afterBlockPut(blockFiles, putData)
+	bdl.quotaTracker.afterBlockPut(blockBytes, putData)
 }
 
 func (bdl *backpressureDiskLimiter) onBlocksDelete(
@@ -549,6 +570,7 @@ func (bdl *backpressureDiskLimiter) onBlocksDelete(
 	defer bdl.lock.Unlock()
 	bdl.byteTracker.onBlocksDelete(blockBytes)
 	bdl.fileTracker.onBlocksDelete(blockFiles)
+	bdl.quotaTracker.onBlocksDelete(blockBytes)
 }
 
 type backpressureDiskLimiterStatus struct {
